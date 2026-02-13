@@ -1,0 +1,94 @@
+﻿# Gradle
+.gradle/
+build/
+**/build/
+
+# Maven
+target/
+**/target/
+
+# Quarkus
+.quarkus/
+*-runner
+*-runner.jar
+*.jks
+
+# Eclipse
+.project
+.classpath
+.settings/
+bin/
+
+# IntelliJ
+.idea/
+*.ipr
+*.iml
+*.iws
+out/
+
+# NetBeans
+nb-configuration.xml
+
+# Visual Studio Code
+.vscode/
+.factorypath
+
+# OSX
+.DS_Store
+
+# Vim
+*.swp
+*.swo
+
+# patch
+*.orig
+*.rej
+
+# Local environment
+.env
+.env.local
+
+# Plugin directory
+/.quarkus/cli/plugins/
+
+# TLS Certificates
+.certs/
+
+# Logs
+*.log
+logs/
+
+# Native compilation
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Docker
+docker-compose.override.yml
+
+# Test outputs
+test-output/
+**/hs_err_pid*
+
+# Dependency directories
+node_modules/
+
+# Compiled class files
+*.class
+
+# Package files
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak

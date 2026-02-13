@@ -1,0 +1,7 @@
+plugins {
+    java
+}
+
+dependencies {
+    implementation("com.fasterxml.jackson.core:jackson-annotations:2.15.2")
+}

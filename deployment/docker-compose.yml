@@ -1,0 +1,217 @@
+services:
+
+  # POSTGRESQL
+  postgres:
+    image: postgres:17.7-alpine3.23
+    container_name: postgres
+    hostname: postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - microservices-net
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    container_name: postgres-exporter
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_NAME: "postgresql://postgres:postgres@postgres:5432/postgres?sslmode=disable"
+    ports:
+      - "9187:9187"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - microservices-net
+
+
+  # CONSUL
+  consul:
+    image: consul:1.15.4
+    container_name: consul
+    hostname: consul
+    restart: unless-stopped
+    command: >
+      agent 
+      -server 
+      -ui 
+      -bootstrap-expect=1 
+      -client=0.0.0.0
+      -bind=0.0.0.0
+    ports:
+      - "8500:8500"
+      - "8600:8600/udp"
+    volumes:
+      - consul-data:/consul/data
+    networks:
+      - microservices-net
+    healthcheck:
+      test: ["CMD", "consul", "members"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+
+  # TRAEFIK
+  traefik:
+    image: traefik:3.6.6
+    container_name: traefik
+    hostname: traefik
+    restart: unless-stopped
+    command:
+      - "--api.insecure=true"
+      - "--api.dashboard=true"
+      - "--providers.consulcatalog=true"
+      - "--providers.consulcatalog.endpoint.address=consul:8500"
+      - "--providers.consulcatalog.prefix=traefik"
+      - "--providers.consulcatalog.exposedByDefault=false"
+      - "--providers.consulcatalog.refreshInterval=10s"
+      - "--entrypoints.web.address=:80"
+      - "--metrics.prometheus=true"
+      - "--metrics.prometheus.addEntryPointsLabels=true"
+      - "--metrics.prometheus.addServicesLabels=true"
+      - "--log.level=INFO"
+      - "--accesslog=true"
+    ports:
+      - "80:80"
+      - "8081:8080"
+    depends_on:
+      consul:
+        condition: service_healthy
+    networks:
+      - microservices-net
+    labels:
+      - "traefik.enable=true"
+
+
+  # TODO-SERVICE
+  todo-service:
+    image: jjarteaga/todo-service
+    build:
+      context: ../todo-service
+      dockerfile: src/main/docker/Dockerfile
+    container_name: todo-service
+    hostname: todo-service
+    restart: unless-stopped
+    environment:
+      QUARKUS_PROFILE: prod
+      QUARKUS_HTTP_PORT: 8082
+      QUARKUS_DATASOURCE_DB_KIND: postgresql
+      QUARKUS_DATASOURCE_USERNAME: postgres
+      QUARKUS_DATASOURCE_PASSWORD: postgres
+      QUARKUS_DATASOURCE_JDBC_URL: jdbc:postgresql://postgres:5432/postgres
+      QUARKUS_HIBERNATE_ORM_SCHEMA_MANAGEMENT_STRATEGY: drop-and-create
+      QUARKUS_REST_CLIENT_JSONPLACEHOLDER_API_URL: https://jsonplaceholder.typicode.com
+      CONSUL_ENABLED: "true"
+      CONSUL_HOST: consul
+      CONSUL_PORT: 8500
+      SERVICE_NAME: todo-service
+      SERVICE_HOST: todo-service
+      JAVA_OPTS: -Xms256m -Xmx512m
+    ports:
+      - "8082:8082"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
+    networks:
+      - microservices-net
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8082/q/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+
+  # WEB-SERVICE
+  web-service:
+    image: jjarteaga/web-service
+    build:
+      context: ../web-service
+      dockerfile: src/main/docker/Dockerfile
+    container_name: web-service
+    hostname: web-service
+    restart: unless-stopped
+    environment:
+      QUARKUS_PROFILE: prod
+      QUARKUS_HTTP_PORT: 8080
+      QUARKUS_REST_CLIENT_TODO_API_URL: http://todo-service:8082
+      CONSUL_ENABLED: "true"
+      CONSUL_HOST: consul
+      CONSUL_PORT: 8500
+      SERVICE_NAME: web-service
+      SERVICE_HOST: web-service
+      JAVA_OPTS: -Xms256m -Xmx512m
+    ports:
+      - "8080:8080"
+    depends_on:
+      todo-service:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
+    networks:
+      - microservices-net
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/q/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+
+  # PROMETHEUS
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: unless-stopped
+    volumes:
+      - ./config:/etc/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - microservices-net
+    depends_on:
+      - postgres-exporter
+
+
+  # GRAFANA
+  grafana:
+    image: grafana/grafana-oss:latest
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - microservices-net
+
+
+# NETWORKS
+networks:
+  microservices-net:
+    driver: bridge
+    name: microservices-network
+
+
+# VOLUMES
+volumes:
+  postgres-data:
+    name: postgres-data
+  consul-data:
+    name: consul-data

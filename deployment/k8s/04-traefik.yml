@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: traefik
+  labels:
+    app: traefik
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: traefik
+  template:
+    metadata:
+      labels:
+        app: traefik
+    spec:
+      containers:
+        - name: traefik
+          image: traefik:3.6.6
+          args:
+            - "--api.insecure=true"
+            - "--api.dashboard=true"
+            - "--providers.consulCatalog"
+            - "--providers.consulCatalog.refreshInterval=5s"
+            - "--providers.consulCatalog.exposedByDefault=false"
+            - "--providers.consulCatalog.endpoint.address=consul:8500"
+            - "--entrypoints.http.address=:8888"
+            - "--metrics.prometheus=true"
+            - "--metrics.prometheus.addEntryPointsLabels=true"
+            - "--metrics.prometheus.addServicesLabels=true"
+            - "--log.level=INFO"
+            - "--accesslog=true"
+          ports:
+            - name: http
+              containerPort: 8888
+            - name: admin
+              containerPort: 8080
+          resources:
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: traefik
+  labels:
+    app: traefik
+spec:
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8888
+    - name: admin
+      port: 8080
+      targetPort: 8080
+  selector:
+    app: traefik
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: traefik-web
+  labels:
+    app: traefik
+spec:
+  to:
+    kind: Service
+    name: traefik
+    weight: 100
+  port:
+    targetPort: http
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: traefik-dashboard
+  labels:
+    app: traefik
+spec:
+  to:
+    kind: Service
+    name: traefik
+    weight: 100
+  port:
+    targetPort: admin
